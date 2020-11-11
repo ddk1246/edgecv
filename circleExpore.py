@@ -3,7 +3,8 @@ import numpy as np
 
 class ShapeAnalysis:
     def __init__(self):
-        self.shapes = {'triangle': 0, 'rectangle': 0, 'polygons': 0, 'circles': 0}
+        self.elements=[]
+        self.shapes = {'triangle': 0, 'rectangle': 0, 'polygons': 0, 'circles': 0,'square':0}
 
     def analysis(self, frame):
         h, w, ch = frame.shape
@@ -11,12 +12,16 @@ class ShapeAnalysis:
         # 二值化图像
         print("start to detect lines...\n")
         gray = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
-        ret, binary = cv.threshold(gray, 0, 255, cv.THRESH_BINARY_INV | cv.THRESH_OTSU)
+        gray = cv.GaussianBlur(gray, (5, 5), 0)
+        ret, binary = cv.threshold(gray, 200, 255, cv.THRESH_BINARY_INV | cv.THRESH_OTSU)
         cv.imshow("input image", frame)
 
         contours, hierarchy = cv.findContours(binary, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+
         for cnt in range(len(contours)):
             # 提取与绘制轮廓
+            if cv.contourArea(contours[cnt]) < 10:
+                continue
             cv.drawContours(result, contours, cnt, (0, 255, 0), 2)
 
             # 轮廓逼近
@@ -30,22 +35,26 @@ class ShapeAnalysis:
                 count = self.shapes['triangle']
                 count = count+1
                 self.shapes['triangle'] = count
-                shape_type = "三角形"
+                shape_type = "triangle"
             if corners == 4:
-                count = self.shapes['rectangle']
+                (x, y, w, h) = cv.boundingRect(approx)
+                ar = w / float(h)
+                shape_type = "square" if ar >= 0.95 and ar <= 1.05 else "rectangle"
+                count = self.shapes[shape_type]
                 count = count + 1
-                self.shapes['rectangle'] = count
-                shape_type = "矩形"
+                self.shapes[shape_type] = count
+
+
             if corners >= 10:
                 count = self.shapes['circles']
                 count = count + 1
                 self.shapes['circles'] = count
-                shape_type = "圆形"
+                shape_type = "circle"
             if 4 < corners < 10:
                 count = self.shapes['polygons']
                 count = count + 1
                 self.shapes['polygons'] = count
-                shape_type = "多边形"
+                shape_type = "pentagon"
 
             try:
                 # 求解中心位置
@@ -61,11 +70,15 @@ class ShapeAnalysis:
                 # 计算面积与周长
                 p = cv.arcLength(contours[cnt], True)
                 area = cv.contourArea(contours[cnt])
+                cv.putText(result, shape_type, (cx - 20, cy - 20),
+                            cv.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
                 print("周长: %.3f, 面积: %.3f 颜色: %s 形状: %s "% (p, area, color_str, shape_type))
+                element = {'shape':shape_type,'cx':cx,'cy':cy,'color':color}
+                self.elements.append(element)
             except Exception as e:
                 pass
-        cv.imshow("Analysis Result", self.draw_text_info(result))
-        cv.imwrite("./test-result.png", self.draw_text_info(result))
+        cv.imshow("Analysis Result", result)
+        cv.imwrite("./test-result.png", result)
         return self.shapes
 
     def draw_text_info(self, image):
@@ -80,8 +93,27 @@ class ShapeAnalysis:
         return image
 
 if __name__ == "__main__":
-    src = cv.imread("1.png")
     ld = ShapeAnalysis()
+    cap = cv.VideoCapture(1)
+    flag=1
+    while flag:
+        ret, frame = cap.read()
+        ld.analysis(frame)
+        # flag=0
+        # frame = cv.flip(frame, 1)
+        # print(frame.shape)
+        # cv.imshow("sxt", frame)
+        k = cv.waitKey(400)
+        if k == 27:
+            cap.release()
+            break
+        elif k == ord("s"):
+            cv.imwrite("004.jpg", frame)
+    src = cv.imread("1.png")
+
     ld.analysis(src)
-    cv.waitKey(0)
-    cv.destroyAllWindows()
+    print(ld.elements)
+    # cv.waitKey(0)
+    # cv.destroyAllWindows()
+
+
