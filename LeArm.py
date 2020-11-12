@@ -23,10 +23,10 @@ class LeArm:
         self.z3D = 0
 
     def reset(self):
-        t = 400
+        t = 1000
         cmd = [{'ID': i, 'value': 1500} for i in range(1, 7)]
         self.controlMOVE3(cmd, t)
-        time.sleep(t)
+        time.sleep(t/1000)
 
     def stop(self):
         Myinput = [0x55, 0x55, 2, 7]
@@ -50,7 +50,7 @@ class LeArm:
         self.ser.write(Myinput)
         self.ser.write([1, 1, 1])  # 垃圾数据以清零
 
-    def model(self, x, y, alpha):
+    def model(self, x, y, alpha,ctime=1000):
         limtheta = 82
         l2 = 0.17
         l1 = 0.088
@@ -119,8 +119,8 @@ class LeArm:
                [{'ID': 3, 'value': int(2000 * (90.0 - theta3) / 180.0 + 500.0)}]]
         # print(cmd)
         for i in cmd:
-            print(i)
-            self.controlMOVE3(i, 1000)
+            # print(i)
+            self.controlMOVE3(i, ctime)
         # ServoSetPluseAndTime(5, (2000 * (90.0 - theta1) / 180.0 + 500.0), 50) #控制舵机转动， 给根据公式转换脉宽， 以舵机的中位为基准。
         # ServoSetPluseAndTime(4, (2000 * (90.0 + theta2) / 180.0 + 500.0), 50)
         # ServoSetPluseAndTime(3, (2000 * (theta3) / 180.0 + 500.0), 50)
@@ -129,7 +129,7 @@ class LeArm:
         self.lastY = self.targetY  #
         return 0  # 一切正常返回0
 
-    def point2D(self, y, x, z):
+    def point2D(self, y, x, z,ctime=1000):
         self.z3D = z
         self.x3D = y
         self.y3D = x
@@ -137,25 +137,25 @@ class LeArm:
         theta0 = math.atan(y / x) / math.pi * 180
 
         i = math.pi
-        while (learm.model((z), r, i) != 0):
+        while (self.model(z, r, i,ctime) != 0):
             i -= 0.01
             if (i <= 0):
                 break
-        print('i=', i)
+        # print('i=', i)
         cmd = [{'ID': 6, 'value': int(2000 * (90.0 - theta0) / 180.0 + 500.0)}]
-
-        self.controlMOVE3(cmd, 1000)
+        time.sleep(0.6)
+        self.controlMOVE3(cmd, ctime*2)
 
     def grab(self):
         cmd = [{'ID': 1, 'value': 600}]
         self.controlMOVE3(cmd)
         time.sleep(1)
-        learm.point2D(self.x3D, self.y3D, self.z3D - 0.08)
+        self.point2D(self.x3D, self.y3D, self.z3D - 0.08)
         time.sleep(1)
         cmd = [{'ID': 1, 'value': 1500}]
         self.controlMOVE3(cmd)
         time.sleep(1)
-        learm.point2D(self.x3D, self.y3D, self.z3D + 0.08)
+        self.point2D(self.x3D,self.y3D, 0.08 )
 
     def relax(self):
         cmd = [{'ID': 1, 'value': 600}]
@@ -175,11 +175,13 @@ if __name__ == '__main__':
         for i in range(0, len(port_list)):
             print(port_list[i])
 
-    ser = serial.Serial('COM3', 9600, timeout=5)
+    ser = serial.Serial('COM7', 9600, timeout=5)
     learm = LeArm(ser)
-    learm.point2D(-0.25, 0.2, -0.01)
-    print(learm.lastX, learm.lastY)
+    learm.point2D(0.0,0.25, 0.02)
+#     print(learm.lastX, learm.lastY)
     learm.grab()
+    time.sleep(2)
+    learm.reset()
     # cmd=[{'ID': 3, 'value': 896}, {'ID': 4, 'value': 1163}, {'ID': 5, 'value': 900}]
 
     # cmd = [{'ID': 3, 'value': 896}]
