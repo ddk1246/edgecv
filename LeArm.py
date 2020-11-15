@@ -8,16 +8,6 @@ class LeArm:
     def __init__(self, ser):
         self.ser = ser
         self.head = [0x55, 0x55]
-        self.ID = 0x01  # 1-6
-        self.length = 0x05
-        self.CMD_FULL = 0x03
-        self.time = 1000
-        self.value = 1500
-        self.zero = [0X55, 0X55, 0X08, 0X03, 0X01, 0XE8, 0X03, 0X01, 0XDC, 0X05]  # 需要发送的十六进制数据
-        self.lastX = 0
-        self.lastY = 0
-        self.targetX = 0
-        self.targetY = 0
         self.x3D = 0
         self.y3D = 0
         self.z3D = 0
@@ -25,15 +15,15 @@ class LeArm:
     def reset(self):
         t = 1000
         cmd = [{'ID': i, 'value': 1500} for i in range(1, 7)]
-        self.controlMOVE3(cmd, t)
+        self.controlMOVE(cmd, t)
         time.sleep(t/1000)
 
     def stop(self):
         Myinput = [0x55, 0x55, 2, 7]
         self.ser.write(Myinput)
 
-    def controlMOVE3(self, cmd, ctime=400):
-        # cmd =[{ID:1,value:1500},]
+    def controlMOVE(self, cmd, ctime=400):
+        #example : cmd =[{ID:1,value:1500},]
         # self.stop()
         lenCmd = len(cmd)
         Myinput = [0x55, 0x55, lenCmd * 3 + 5, 3, lenCmd,
@@ -44,13 +34,10 @@ class LeArm:
             Myinput.append(cmd[c]['value'] & 0xff)
             Myinput.append(cmd[c]['value'] >> 8)
 
-        # l = [hex(Myinput[i]) for i in range(lenCmd * 3 + 5)]
-        # print(l)
-
         self.ser.write(Myinput)
         self.ser.write([1, 1, 1])  # 垃圾数据以清零
 
-    def model(self, x, y, alpha,ctime=1000):
+    def InverseKinematics(self, x, y, alpha, ctime=1000):
         limtheta = 82
         l2 = 0.17
         l1 = 0.088
@@ -64,8 +51,6 @@ class LeArm:
         c = k * k - m * m
 
         if (b * b - 4 * a * c <= 0):  # b ^ 2 - 4ac 小于0即无实根，直接返回
-            self.targetX = self.lastX
-            self.targetY = self.lastY
             return 1  # 返回1，作错误
 
         theta1 = (-b - math.sqrt(
@@ -85,8 +70,6 @@ class LeArm:
         c = k * k - m * m
 
         if (b * b - 4 * a * c <= 0):  # 方程无实根就不做求解
-            self.targetX = self.lastX
-            self.targetY = self.lastY
             return 2  # 返回2， 作错误标记
 
         s1ps2 = (-b + math.sqrt(b * b - 4 * a * c)) / 2 / a
@@ -117,19 +100,13 @@ class LeArm:
         cmd = [[{'ID': 5, 'value': int(2000 * (90.0 + theta1) / 180.0 + 500.0)}],
                [{'ID': 4, 'value': int(2000 * (90.0 - theta2) / 180.0 + 500.0)}],
                [{'ID': 3, 'value': int(2000 * (90.0 - theta3) / 180.0 + 500.0)}]]
-        # print(cmd)
         for i in cmd:
             # print(i)
-            self.controlMOVE3(i, ctime)
-        # ServoSetPluseAndTime(5, (2000 * (90.0 - theta1) / 180.0 + 500.0), 50) #控制舵机转动， 给根据公式转换脉宽， 以舵机的中位为基准。
-        # ServoSetPluseAndTime(4, (2000 * (90.0 + theta2) / 180.0 + 500.0), 50)
-        # ServoSetPluseAndTime(3, (2000 * (theta3) / 180.0 + 500.0), 50)
-
-        self.lastX = self.targetX  # 将当前位置，替换为目标位置
-        self.lastY = self.targetY  #
+            self.controlMOVE(i, ctime)
         return 0  # 一切正常返回0
 
-    def point2D(self, y, x, z,ctime=1000):
+    def point3D(self, y, x, z, ctime=900):
+        #内置延时
         self.z3D = z
         self.x3D = y
         self.y3D = x
@@ -137,33 +114,35 @@ class LeArm:
         theta0 = math.atan(y / x) / math.pi * 180
 
         i = math.pi
-        while (self.model(z, r, i,ctime) != 0):
+        while (self.InverseKinematics(z, r, i, ctime) != 0):
             i -= 0.01
             if (i <= 0):
                 break
         # print('i=', i)
         cmd = [{'ID': 6, 'value': int(2000 * (90.0 - theta0) / 180.0 + 500.0)}]
-        time.sleep(0.6)
-        self.controlMOVE3(cmd, ctime*2)
+        self.controlMOVE(cmd, ctime)
+        time.sleep(ctime / 1000)
 
     def grab(self):
         cmd = [{'ID': 1, 'value': 600}]
-        self.controlMOVE3(cmd)
-        time.sleep(1)
-        self.point2D(self.x3D, self.y3D, self.z3D - 0.08)
-        time.sleep(1)
+        self.controlMOVE(cmd)
+        time.sleep(0.4)
+        self.point3D(self.x3D, self.y3D, self.z3D - 0.077) #会更新z3D
+        time.sleep(0.1)
+
         cmd = [{'ID': 1, 'value': 1500}]
-        self.controlMOVE3(cmd)
-        time.sleep(1)
-        self.point2D(self.x3D,self.y3D, 0.08 )
+        self.controlMOVE(cmd)
+        time.sleep(0.4)
+        self.point3D(self.x3D, self.y3D, 0.1)
 
     def relax(self):
         cmd = [{'ID': 1, 'value': 600}]
-        self.controlMOVE3(cmd)
-        time.sleep(1)
+        self.controlMOVE(cmd)
+        time.sleep(0.4)
+
     def hold(self):
         cmd = [{'ID': 1, 'value': 1500}]
-        self.controlMOVE3(cmd)
+        self.controlMOVE(cmd)
 
 if __name__ == '__main__':
 
@@ -175,13 +154,16 @@ if __name__ == '__main__':
         for i in range(0, len(port_list)):
             print(port_list[i])
 
-    ser = serial.Serial('COM7', 9600, timeout=5)
+    ser = serial.Serial('COM8', 9600, timeout=5)
+
     learm = LeArm(ser)
-    learm.point2D(0.0,0.25, 0.02)
+    learm.point3D(-0.26,0.01, 0.1)
+
+
 #     print(learm.lastX, learm.lastY)
-    learm.grab()
-    time.sleep(2)
-    learm.reset()
+#     learm.grab()
+#     time.sleep(2)
+#     learm.reset()
     # cmd=[{'ID': 3, 'value': 896}, {'ID': 4, 'value': 1163}, {'ID': 5, 'value': 900}]
 
     # cmd = [{'ID': 3, 'value': 896}]
