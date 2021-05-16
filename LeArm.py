@@ -154,16 +154,18 @@ if __name__ == '__main__':
         for i in range(0, len(port_list)):
             print(port_list[i])
 
-    ser = serial.Serial('COM8', 9600, timeout=5)
+    ser = serial.Serial('COM10', 9600, timeout=5)
 
     learm = LeArm(ser)
-    learm.point3D(-0.26,0.01, 0.1)
+    learm.point3D(0.08,0.25, 0.01)
 
 
 #     print(learm.lastX, learm.lastY)
-#     learm.grab()
-#     time.sleep(2)
-#     learm.reset()
+    learm.grab()
+    time.sleep(0.1)
+    learm.relax()
+    # time.sleep(2)
+    learm.reset()
     # cmd=[{'ID': 3, 'value': 896}, {'ID': 4, 'value': 1163}, {'ID': 5, 'value': 900}]
 
     # cmd = [{'ID': 3, 'value': 896}]

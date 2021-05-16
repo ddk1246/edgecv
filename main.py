@@ -9,24 +9,25 @@ import threading
 class ShapeAnalysis:
     def __init__(self, cap):
         self.cap = cap
-        self.Frame=[]
-        self.resultFrame=[]
+        self.Frame = []
+        self.resultFrame = []
         self.elements = []
         self.contours = []
         self.shapes = {'triangle': 0, 'rectangle': 0, 'polygons': 0, 'circles': 0, 'square': 0}
         self.thr = threading.Thread(target=self.imageShow)
         self.thr.daemon = 1
 
-        self.TARGET_COLORS = {"Red": (161, 60, 52), "Blue": (53, 99, 147),
-                              "Orange": (148, 124, 35), "Purple": (146, 98, 128)}  # RGB值
+        self.TARGET_COLORS = {"Red": (120, 50, 53), "Blue": (53, 99, 147),
+                              "Orange": (134, 80, 46), "Purple": (146, 98, 128),
+                              "Green": (76, 113, 55)}  # RGB值
 
     def imageShow(self):
         while 1:
             cv.imshow("input image", self.resultFrame)
             cv.waitKey(400)
 
-    def setFrame(self,frame):
-        self.frame=frame
+    def setFrame(self, frame):
+        self.frame = frame
 
     def analysis(self, frame):
         self.elements = []
@@ -37,12 +38,12 @@ class ShapeAnalysis:
         print("start to detect lines...\n")
         gray = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
         # gray = cv.GaussianBlur(gray, (5, 5), 0)
-        ret, binary = cv.threshold(gray, 130, 255, cv.THRESH_BINARY_INV)
+        ret, binary = cv.threshold(gray, 115, 255, cv.THRESH_BINARY_INV)
 
         m = np.zeros_like(binary)
-        m[80:430, 80:560] = 255
+        m[120:400, 80:560] = 255
         dst = cv.bitwise_and(binary, m)
-        result =  cv.bitwise_and(frame,frame,mask= dst)
+        result = cv.bitwise_and(frame, frame, mask=dst)
         self.contours, hierarchy = cv.findContours(dst, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
 
         for cnt in range(len(self.contours)):
@@ -104,12 +105,16 @@ class ShapeAnalysis:
                 area = cv.contourArea(self.contours[cnt])
                 cv.putText(result, str(shape_type + '  ' + str(my_color_name)), (cx - 30, cy - 20),
                            cv.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
+
+                if shape_type=="circle":
+                    cy=cy-17
                 print("周长: %.3f, 面积: %.3f 颜色: %s 形状: %s " % (p, area, color_str, shape_type))
-                element = {'shape': shape_type, 'cx': cx, 'cy': cy, 'color': color, 'colorName': my_color_name}
+                element = {'shape': shape_type, 'cx': cx, 'cy': cy, 'color': cargoColor, 'colorName': my_color_name}
                 self.elements.append(element)
 
             except Exception as e:
                 pass
+            self.resultFrame = result
         return result
 
 
@@ -118,28 +123,27 @@ def color_difference(color1, color2):
 
 
 def main():
-    #端口及机械臂初始化
-    ser = serial.Serial('COM8', 9600, timeout=5)
+    # 端口及机械臂初始化
+    ser = serial.Serial('COM16', 9600, timeout=5)
     learm = LeArm(ser)
-    #摄像头及分析模块初始化
+    # 摄像头及分析模块初始化
     cap = cv.VideoCapture(1)
     ld = ShapeAnalysis(cap)
 
     flag = 1
     # 手眼标定仿射矩阵
-    m = np.array([[7.95564899e-06, 5.78018820e-04, -1.69083080e-01],
-                  [-6.06313506e-04, -4.14747646e-05, 4.60930914e-01]])
-    #机械臂卸载位置
-    trianglePlace = [-0.29, 0.01]
-    circlePlace = [-0.29, 0.11]
-    squarePlace = [-0.2, 0.01]
-    rectanglePlace = [-0.2, 0.11]
+    m = np.array([[4.43100133e-06, -6.13883183e-04, 2.43638333e-01],
+                  [6.10930452e-04, -1.66112753e-05, 1.72203651e-01]])
+    # 机械臂卸载位置
+    trianglePlace = [0.28, 0.01]
+    circlePlace = [0.28, 0.08]
+    squarePlace = [0.15, 0.01]
+    rectanglePlace = [0.15, 0.08]
 
-    learm.reset() #机械臂复原
+    learm.reset()  # 机械臂复原
     ret, frame = cap.read()
     ld.analysis(frame)
-    ld.thr.start() #显示线程
-
+    ld.thr.start()  # 显示线程
 
     while flag:
         # element = {'shape': shape_type, 'cx': cx, 'cy': cy, 'color': color}
@@ -147,9 +151,9 @@ def main():
         print(ld.elements)
         for ele in ld.elements:
             point = np.zeros([2, 1])
-            point[0] = ele['cy'] #由于历史原因与标定.py匹配,即输入第0项为cy，第1项为cx
+            point[0] = ele['cy']  # 由于历史原因与标定.py匹配,即输入第0项为cy，第1项为cx
             point[1] = ele['cx']
-            cir = np.matmul(m[:, 0:2], point).T[0] + m[:, 2] #摄像机坐标系转换为机械臂坐标系
+            cir = np.matmul(m[:, 0:2], point).T[0] + m[:, 2]  # 摄像机坐标系转换为机械臂坐标系
 
             useShape = 1
             shape = ele['shape']
@@ -170,24 +174,25 @@ def main():
                     ax = circlePlace
                 elif colorName == "Orange":
                     ax = squarePlace
+                elif colorName == "Green":
+                    ax = rectanglePlace
                 else:
                     ax = rectanglePlace
-
 
             print('shape=', ele['shape'], ' cx=', ele['cx'], ' cy=', ele['cy'], ' color=', ele['color'], ' colorName=',
                   colorName,
                   ' \t cmd = ', cir)
-            #机械臂抓取
+            # 机械臂抓取
             learm.relax()
             learm.point3D(cir[0], cir[1], 0.012)
             learm.grab()
-            #机械臂放置
+            # 机械臂放置
             learm.point3D(ax[0], ax[1], 0.1)
             time.sleep(0.2)
             learm.relax()
-        #复原
+        # 复原
         learm.reset()
-        time.sleep(3) #采样延时
+        time.sleep(3)  # 采样延时
         ret, frame = cap.read()
         ld.analysis(frame)
 
